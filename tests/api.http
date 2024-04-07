@@ -1,0 +1,8 @@
+POST http://localhost:5000/api/startTask
+Content-Type: application/json
+
+{
+"task_name":  "run_job",
+"taskLogId":  "xxx"}
+
+###
