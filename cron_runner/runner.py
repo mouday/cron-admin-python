@@ -4,62 +4,70 @@
 @Date    : 2024-04-07
 """
 
-import traceback
-from concurrent.futures import ThreadPoolExecutor
-
 from flask import request, jsonify
 
 from cron_runner import config, context
-
-executor = ThreadPoolExecutor()
-
-
-def run_task_wrap(func):
-    def run_task(ctx):
-        err = None
-
-        try:
-            func(ctx)
-        except Exception as e:
-            err = traceback.format_exc()
-            ctx.log(err)
-
-        ctx.report(err)
-
-    return run_task
-
+from cron_runner.task_runner import TaskRunner, SendMessageRunner
+from cron_runner.log import logger
 
 class CronRunner(object):
     def __init__(self, app):
         self.app = app
-        self.tasks = {}
         self.host = None
+
+        self.tasks = {}
+        self.task_runner = None
+        self.task_report_runner = None
+
         # auto
-        self.register_router()
-
-    def register_router(self):
-        self.app.add_url_rule(rule=config.API_START_TASK, endpoint=None, view_func=self.start_task, methods=['POST'])
-
-    def start_task(self):
-        data = request.get_json()
-        task_name = request.args.get('task_name')
-        ctx = context.CronAdminContext(self.host, data)
-        task_func = self.tasks[task_name]
-
-        executor.submit(run_task_wrap(task_func), ctx)
-
-        return jsonify({'msg': 'success', 'data': None, 'code': 0})
-
-    def add_task(self, name, func):
-        self.tasks[name] = func
-
-    def add_task_decorator(self, name):
-        this = self
-
-        def inner(func):
-            this.add_task(name, func)
-
-        return inner
+        self._register_router()
 
     def set_host(self, host):
         self.host = host
+
+    def add_task(self, func_or_name, name=None):
+        """
+        add task func
+        :param func_or_name:
+        :param name:
+        :return:
+        """
+        if callable(func_or_name):
+            name = name or func_or_name.__name__
+            self.tasks[name] = func_or_name
+        else:
+            this = self
+
+            def inner(func):
+                this.tasks[func_or_name] = func
+
+            return inner
+
+    def _register_router(self):
+        self.app.add_url_rule(rule=config.API_START_TASK, endpoint=None, view_func=self._start_task, methods=['POST'])
+
+    def _start_task(self):
+        # 1、接收线程
+        data = request.get_json()
+        logger.info('receive data: %s', data)
+
+        task_name = data.get('taskName')
+        ctx = context.CronRunnerContext(self.host, data)
+
+        task_func = self.tasks[task_name]
+
+        # 2、执行线程
+        if not self.task_runner:
+            self.task_runner = TaskRunner()
+            self.task_runner.start()
+
+        # 3、汇报线程
+        if not self.task_report_runner:
+            self.task_report_runner = SendMessageRunner(config.DEFAULT_CRON_ADMIN_HOST + config.API_REPORT_TASK_STATUS)
+            self.task_report_runner.start()
+
+        ctx.set_task_report(self.task_report_runner)
+
+        self.task_runner.submit_task(task_func, ctx)
+
+        return jsonify({'msg': 'success', 'data': None, 'code': 0})

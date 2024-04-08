@@ -2,7 +2,18 @@ POST http://localhost:5000/api/startTask
 Content-Type: application/json
 
 {
-"task_name":  "run_job",
-"taskLogId":  "xxx"}
+"taskName":  "run_job",
+"taskLogId":  "xxx1"
+}
+
+###
+
+POST http://localhost:5000/api/startTask
+Content-Type: application/json
+
+{
+"taskName":  "run_job_2",
+"taskLogId":  "xxx2"
+}
 
 ###
