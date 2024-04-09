@@ -12,6 +12,7 @@ import requests
 
 from cron_runner import config
 from cron_runner.log import logger
+from cron_runner.version import VERSION
 
 try:
     from cron_runner.context import CronRunnerContext
@@ -135,8 +136,13 @@ class SendMessageRunner(threading.Thread):
 
             logger.info('send message: %s', merged_list)
 
+            # runner version
+            headers = {
+                'X-Runner-Version': VERSION
+            }
+
             try:
-                requests.post(self.host, json=merged_list, timeout=3)
+                requests.post(self.host, headers=headers, json=merged_list, timeout=3)
             except Exception as e:
                 traceback.print_exc()
 
